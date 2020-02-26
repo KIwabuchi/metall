@@ -1,6 +1,8 @@
 services: docker
 dist: bionic
 language: cpp
+git:
+  depth: false
 
 env:
   - BOOST_VERSION=1_72_0 CC=gcc8.1.0 CXX=g++8.1.0
@@ -53,6 +55,12 @@ env:
 #  - BOOST_VERSION=1_64_0 CC=gcc8.3.0 CXX=g++8.3.0
 #  - BOOST_VERSION=1_64_0 CC=gcc9.1.0 CXX=g++9.1.0
 #  - BOOST_VERSION=1_64_0 CC=gcc9.2.0 CXX=g++9.2.0
+
+before_install:
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+  - sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+  - sudo apt-get update
+  - sudo apt-get -y -o Dpkg::Options::="--force-confnew" install docker-ce
 
 script:
   - docker run --name centos7_bash -v ${TRAVIS_BUILD_DIR}:/mnt/travis_build_dir -it -d kiwabuchi/metall_test:centos7 bash
