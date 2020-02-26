@@ -55,4 +55,5 @@ env:
 #  - BOOST_VERSION=1_64_0 CC=gcc9.2.0 CXX=g++9.2.0
 
 script:
-  - docker run --rm  -e CC -e CXX --env CMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH}:/var/boost/boost_${BOOST_VERSION}" kiwabuchi/metall_test:centos7 bash ./scripts/CI/travis_ci/build_and_test.sh
+  - docker run --name centos7_bash -v ${TRAVIS_BUILD_DIR}:/mnt/travis_build_dir -it -d kiwabuchi/metall_test:centos7 bash
+  - docker exec -it centos7_bash -w /mnt/travis_build_dir -e CC -e CXX --env CMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH}:/var/boost/boost_${BOOST_VERSION}" bash ./scripts/CI/travis_ci/build_and_test.sh
