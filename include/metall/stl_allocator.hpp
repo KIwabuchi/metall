@@ -12,6 +12,7 @@
 #include <cassert>
 #include <limits>
 #include <new>
+#include <cstdlib>
 
 #include <metall/detail/base_stl_allocator.hpp>
 #include <metall/offset_ptr.hpp>
@@ -78,6 +79,10 @@ class stl_allocator
   // -------------------------------------------------------------------------------- //
   // Constructor & assign operator
   // -------------------------------------------------------------------------------- //
+  /// \brief Default constructor which does not take a pointer of a manager kernel objet.
+  /// Does not use Metall to allocate and deallocate memory.
+  stl_allocator() : m_ptr_manager_kernel_address(nullptr) {}
+
   // Note: following manager.hpp in Boost.interprocess, 'explicit' keyword is not used on purpose
   // although this allocator won't work correctly w/o a valid manager_kernel_address
   stl_allocator(manager_kernel_type **const pointer_manager_kernel_address)
@@ -90,8 +95,6 @@ class stl_allocator
   template <typename T2>
   stl_allocator(const stl_allocator<T2, manager_kernel_type> &allocator_instance)
       : m_ptr_manager_kernel_address(allocator_instance.get_pointer_to_manager_kernel()) {
-    assert(m_ptr_manager_kernel_address);
-    assert(*m_ptr_manager_kernel_address);
   }
 
   stl_allocator(const stl_allocator<T, manager_kernel_type> &other) = default;
@@ -104,8 +107,6 @@ class stl_allocator
   template <typename T2>
   stl_allocator &operator=(const stl_allocator<T2, manager_kernel_type> &other) {
     m_ptr_manager_kernel_address = other.m_ptr_manager_kernel_address;
-    assert(m_ptr_manager_kernel_address);
-    assert(*m_ptr_manager_kernel_address);
     return *this;
   }
 
@@ -113,8 +114,6 @@ class stl_allocator
   template <typename T2>
   stl_allocator &operator=(stl_allocator<T2, manager_kernel_type> &&other) noexcept {
     m_ptr_manager_kernel_address = other.m_ptr_manager_kernel_address;
-    assert(m_ptr_manager_kernel_address);
-    assert(*m_ptr_manager_kernel_address);
     return *this;
   }
 
@@ -122,6 +121,7 @@ class stl_allocator
   /// \brief Returns a pointer that points to manager kernel
   /// \return A pointer that points to manager kernel
   manager_kernel_type **get_pointer_to_manager_kernel() const {
+    if (!m_ptr_manager_kernel_address) return nullptr;
     assert(m_ptr_manager_kernel_address);
     assert(*m_ptr_manager_kernel_address);
     return metall::to_raw_pointer(m_ptr_manager_kernel_address);
@@ -141,6 +141,13 @@ class stl_allocator
       throw std::bad_array_new_length();
     }
 
+    // Use std::malloc instead of Metall to allocate
+    if (!get_pointer_to_manager_kernel()) {
+      void *const addr = std::malloc(sizeof(value_type) * n);
+      if (!addr) throw std::bad_alloc();
+      return pointer(static_cast<value_type*>(addr));
+    }
+
     auto manager_kernel = *get_pointer_to_manager_kernel();
     if (!manager_kernel) {
       throw std::bad_alloc();
@@ -155,6 +162,12 @@ class stl_allocator
   }
 
   void deallocate_impl(pointer ptr, [[maybe_unused]] const size_type size) const noexcept {
+    // Use std::free instead of Metall to deallocate
+    if (!get_pointer_to_manager_kernel()) {
+      std::free(to_raw_pointer(ptr));
+      return;
+    }
+
     auto manager_kernel = *get_pointer_to_manager_kernel();
     assert(manager_kernel);
     manager_kernel->deallocate(to_raw_pointer(ptr));
@@ -174,7 +187,7 @@ class stl_allocator
     (*ptr).~value_type();
   }
 
-  stl_allocator select_on_container_copy_construction_impl(const stl_allocator<T, manager_kernel_type>& a) {
+  stl_allocator select_on_container_copy_construction_impl(const stl_allocator<T, manager_kernel_type> &a) {
     return stl_allocator<T, manager_kernel_type>(a);
   }
 
@@ -189,6 +202,9 @@ class stl_allocator
 
 template <typename T, typename kernel>
 inline bool operator==(const stl_allocator<T, kernel> &rhd, const stl_allocator<T, kernel> &lhd) {
+  // Both not using Metall kernel to allocate memory
+  if (!rhd.get_pointer_to_manager_kernel() && !lhd.get_pointer_to_manager_kernel()) return true;
+
   // Return true if they point to the same manager kernel
   return *(rhd.get_pointer_to_manager_kernel()) == *(lhd.get_pointer_to_manager_kernel());
 }
